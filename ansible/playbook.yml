@@ -1,0 +1,79 @@
+- hosts: all
+
+  vars_files:
+  - 'vars.yml'
+
+  become: yes
+  gather_facts: no
+
+  tasks:
+
+  - name: Installing apt packages
+    apt:
+      name: "{{ packages }}"
+    vars:
+      packages:
+        - git
+        - python3-pip
+        - nginx
+        - memcached
+      state: latest
+    tags: apt
+    notify:
+      - restart nginx
+
+  - name: Clone repo
+    git:
+      repo: "{{ repository }}"
+      dest: "{{ site_root }}"
+      update: no
+    when: "'prod' in group_names"
+    tags: repo
+
+  - name: Git pull origin dev
+    git:
+      repo: "{{ repository }}"
+      dest: "{{ site_root }}"
+      update: yes
+      force: yes
+      version: dev
+    tags: ['never', 'git_pull']
+    notify:
+    - restart gunicorn
+
+  - name: Installing requirements.txt
+    pip:
+      requirements: '{{ requirements }}'
+      executable: "pip3"
+
+  - name: Migrations
+    command: python3 manage.py "{{ item }}" chdir="{{ site_root }}"
+    with_items:
+    - 'makemigrations'
+    - 'migrate'
+    tags: migrations
+
+  - name: Gunicorn configuration
+    template:
+      src: etc/systemd/system/gunicorn.service
+      dest: /etc/systemd/system/gunicorn.service
+    notify:
+    - restart gunicorn
+
+  - name: Nginx configuration
+    template:
+      src: etc/nginx/sites-available/default
+      dest: /etc/nginx/sites-available/default
+    tags: nginx
+    notify:
+    - restart nginx
+
+  handlers:
+  - name: restart nginx
+    service:
+      name: nginx
+      state: restarted
+  - name: restart gunicorn
+    service:
+      name: gunicorn
+      state: restarted

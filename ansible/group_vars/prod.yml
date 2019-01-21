@@ -1,0 +1,3 @@
+server_name: 'bewgb.ru'
+requirements: '{{ site_root }}/requirements.txt'
+gunicorn_bin: '/usr/local/bin/gunicorn'
